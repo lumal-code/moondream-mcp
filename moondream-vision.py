@@ -244,7 +244,7 @@ async def get_detection_data(image_path: str, object: str) -> str:
     """
     Detect objects in an image and return detection data as JSON.
     
-    Returns structured coordinate data and confidence scores for detected objects,
+    Returns structured coordinate data for detected objects,
     useful for programmatic processing or detailed analysis of object locations.
     
     Args:
@@ -252,7 +252,7 @@ async def get_detection_data(image_path: str, object: str) -> str:
         object: Object to detect (e.g., 'person', 'car', 'face', 'dog')
         
     Returns:
-        JSON formatted detection data with coordinates and confidence scores
+        JSON formatted detection data with coordinates
     """
     try:
         if not validate_image_path(image_path):
@@ -279,6 +279,52 @@ async def get_detection_data(image_path: str, object: str) -> str:
         return f"Error: Could not find image at {image_path}"
     except Exception as e:
         logger.error(f"Error getting detection data: {e}")
+        return f"Error processing image: {str(e)}"
+
+@mcp.tool()
+async def point_object(image_path: str, object: str) -> str:
+    """
+    Find specific points/locations of objects in an image.
+    
+    Returns precise normalized point coordinates for objects,
+    useful for UI automation, precise object location, or counting instances.
+    
+    Args:
+        image_path: Absolute file path to the image file on local filesystem
+        object: Object to locate (e.g., 'person', 'car', 'face', 'button')
+        
+    Returns:
+        JSON formatted point data with precise coordinates
+    """
+    try:
+        if not validate_image_path(image_path):
+            return f"Error: Invalid image path or unsupported format: {image_path}"
+            
+        if not object.strip():
+            return "Error: Object to point at cannot be empty"
+            
+        image = PILImage.open(image_path)
+        result = model.point(image, object)
+        
+        # Extract points from the response
+        points = result.get("points", [])
+        
+        # Structure the response
+        response_data = {
+            "image_path": image_path,
+            "target_object": object,
+            "point_count": len(points),
+            "points": points,
+            "request_id": result.get("request_id", "unknown")
+        }
+        
+        logger.info(f"Generated {len(points)} points for {object} in {image_path}")
+        return f"Object pointing results:\n{json.dumps(response_data, indent=2)}"
+        
+    except FileNotFoundError:
+        return f"Error: Could not find image at {image_path}"
+    except Exception as e:
+        logger.error(f"Error getting point data: {e}")
         return f"Error processing image: {str(e)}"
 
 if __name__ == "__main__":

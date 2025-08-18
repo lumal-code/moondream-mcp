@@ -125,16 +125,34 @@ async def caption_image(image_path: str) -> dict:
     """
     Generate a descriptive caption for an image from a local file path.
     
-    This tool can directly access files on the local filesystem using absolute file paths 
-    like '/Users/username/image.jpg' or '/path/to/image.png'. The user may provide a file 
-    path and you should pass it directly to this tool.
+    This tool uses Moondream VLM to analyze images and generate natural language
+    descriptions. Supports common image formats and provides detailed captions
+    describing the scene, objects, and context within the image.
     
     Args:
-        image_path: Absolute file path to the image file on local filesystem
+        image_path (str): Absolute file path to the image file on local filesystem.
+                         Must be within the configured ALLOW_ROOT directory.
+                         Supported formats: .jpg, .jpeg, .png, .gif, .bmp, .webp
         
     Returns:
-        JSON message with a result value of either success or error and a value with 
-        either the caption or the error message.
+        dict: Structured response containing:
+            - success (bool): True if caption generated successfully
+            - data (str|None): Generated image caption or None on error  
+            - error (str|None): Error message or None on success
+            
+    Raises:
+        FileNotFoundError: Image file not found or inaccessible
+        PermissionError: Insufficient permissions to read file
+        ValueError: Unsupported image format or corrupted file
+        
+    Examples:
+        >>> result = await caption_image("/Users/luke/vacation.jpg")
+        >>> if result["success"]:
+        ...     print(result["data"])  # "A beautiful sunset over the ocean with people walking on the beach"
+        
+        >>> # Error case
+        >>> result = await caption_image("/invalid/path.jpg")
+        >>> print(result["error"])  # "Invalid image path or unsupported format: /invalid/path.jpg"
     """
     try:
         if not validate_image_path(image_path):
@@ -172,20 +190,37 @@ async def caption_image(image_path: str) -> dict:
 @mcp.tool()
 async def query_image(image_path: str, query: str) -> dict:
     """
-    Ask Moondream VLM any question about an image from a local file path.
+    Ask specific questions about an image using natural language queries.
     
-    This tool can directly access images on the local filesystem using absolute 
-    file paths (e.g., '/Users/username/image.jpg', '/path/to/photo.png').
-    Use this for general image analysis, object detection, scene description,
-    or answering specific questions about image content.
+    This tool enables interactive analysis of images by asking targeted questions.
+    Use this for detailed inspection, object counting, color identification,
+    spatial relationships, or any specific visual analysis task.
     
     Args:
-        image_path: Absolute file path to the image file on local filesystem
-        query: Specific question to ask about the image (e.g., "What objects are in this image?", 
-               "Describe the scene", "What color is the car?")
-               
+        image_path (str): Absolute file path to the image file on local filesystem.
+                         Must be within the configured ALLOW_ROOT directory.
+                         Supported formats: .jpg, .jpeg, .png, .gif, .bmp, .webp
+        query (str): Natural language question about the image content.
+                    Cannot be empty or whitespace-only.
+        
     Returns:
-        Answer to the question about the image
+        dict: Structured response containing:
+            - success (bool): True if query answered successfully
+            - data (str|None): Answer to the question or None on error  
+            - error (str|None): Error message or None on success
+            
+    Raises:
+        FileNotFoundError: Image file not found or inaccessible
+        PermissionError: Insufficient permissions to read file
+        ValueError: Empty query or unsupported image format
+        
+    Examples:
+        >>> result = await query_image("/Users/luke/street.jpg", "How many cars are visible?")
+        >>> if result["success"]:
+        ...     print(result["data"])  # "I can see 3 cars in the image - two sedans and one SUV"
+        
+        >>> result = await query_image("/Users/luke/room.jpg", "What color are the walls?")
+        >>> print(result["data"])  # "The walls appear to be painted in a light blue color"
     """
     try:
         if not validate_image_path(image_path):
@@ -230,18 +265,35 @@ async def query_image(image_path: str, query: str) -> dict:
 @mcp.tool()
 async def read_image_text(image_path: str) -> dict:
     """
-    Extract and read all text content from an image using OCR capabilities.
+    Extract and transcribe all text content from an image using OCR capabilities.
     
-    This tool can directly access images on the local filesystem using absolute
-    file paths (e.g., '/Users/username/document.jpg', '/path/to/screenshot.png').
-    Optimized for reading text from documents, screenshots, signs, books, or any
-    image containing written content.
+    This tool is optimized for reading text from documents, screenshots, signs,
+    books, handwritten notes, or any image containing written content. It can
+    handle multiple text orientations and various fonts.
     
     Args:
-        image_path: Absolute file path to the image file on local filesystem
+        image_path (str): Absolute file path to the image file on local filesystem.
+                         Must be within the configured ALLOW_ROOT directory.
+                         Supported formats: .jpg, .jpeg, .png, .gif, .bmp, .webp
         
     Returns:
-        All text content found in the image
+        dict: Structured response containing:
+            - success (bool): True if text extraction completed successfully
+            - data (str|None): All extracted text content or None on error  
+            - error (str|None): Error message or None on success
+            
+    Raises:
+        FileNotFoundError: Image file not found or inaccessible
+        PermissionError: Insufficient permissions to read file
+        ValueError: Unsupported image format or corrupted file
+        
+    Examples:
+        >>> result = await read_image_text("/Users/luke/document.png")
+        >>> if result["success"]:
+        ...     print(result["data"])  # "Invoice #12345\nDate: 2024-01-15\nTotal: $299.99"
+        
+        >>> result = await read_image_text("/Users/luke/sign.jpg")
+        >>> print(result["data"])  # "STOP\nDo Not Enter\nAuthorized Personnel Only"
     """
     try:
         if not validate_image_path(image_path):
@@ -285,13 +337,44 @@ async def create_annotated_image(image_path: str, target_object: str, save_path:
     """
     Detect objects in an image and save an annotated version with bounding boxes.
     
+    This tool performs object detection and creates a new image with red bounding
+    boxes drawn around detected instances of the specified object. Useful for
+    visual verification of detection results and creating annotated datasets.
+    
     Args:
-        image_path: Absolute file path to the source image
-        target_object: Object to detect in the image (e.g., 'person', 'car', 'dog')
-        save_path: Where to save annotated image. If not provided, saves next to original with '_annotated' suffix
+        image_path (str): Absolute file path to the source image file.
+                         Must be within the configured ALLOW_ROOT directory.
+                         Supported formats: .jpg, .jpeg, .png, .gif, .bmp, .webp
+        target_object (str): Object type to detect and annotate (e.g., 'person', 'car', 'dog').
+                           Cannot be empty or whitespace-only.
+        save_path (str, optional): Absolute path where annotated image will be saved.
+                                 If None, saves next to original with '_annotated' suffix.
+                                 Must be within the configured ALLOW_ROOT directory.
         
     Returns:
-        Success message with save location and detection count
+        dict: Structured response containing:
+            - success (bool): True if annotation completed and saved successfully
+            - data (str|None): Success message with save location and detection count, or None on error  
+            - error (str|None): Error message or None on success
+            
+    Raises:
+        FileNotFoundError: Source image file not found or inaccessible
+        PermissionError: Insufficient permissions to read source or write to save location
+        ValueError: Empty target_object or unsupported image format
+        
+    Examples:
+        >>> result = await create_annotated_image("/Users/luke/street.jpg", "car")
+        >>> if result["success"]:
+        ...     print(result["data"])  
+        # "Successfully saved annotated image to: /Users/luke/street_car_annotated.jpg
+        #  Detected 3 instances of 'car' in the image."
+        
+        >>> # Custom save path
+        >>> result = await create_annotated_image(
+        ...     "/Users/luke/photo.jpg", 
+        ...     "person", 
+        ...     "/Users/luke/annotated/people_detected.jpg"
+        ... )
     """
     try:
         if not validate_image_path(image_path):
@@ -375,17 +458,56 @@ async def create_annotated_image(image_path: str, target_object: str, save_path:
 @mcp.tool()
 async def get_detection_data(image_path: str, target_object: str) -> dict:
     """
-    Detect objects in an image and return detection data as JSON.
+    Detect objects in an image and return structured coordinate data as JSON.
     
-    Returns structured coordinate data for detected objects,
-    useful for programmatic processing or detailed analysis of object locations.
+    This tool provides programmatic access to object detection results, returning
+    precise bounding box coordinates and metadata. Useful for automated analysis,
+    data processing pipelines, or integration with other computer vision tools.
     
     Args:
-        image_path: Absolute file path to the image (e.g., '/Users/luke/photo.jpg')
-        target_object: Object to detect (e.g., 'person', 'car', 'face', 'dog')
+        image_path (str): Absolute file path to the image file.
+                         Must be within the configured ALLOW_ROOT directory.
+                         Supported formats: .jpg, .jpeg, .png, .gif, .bmp, .webp
+        target_object (str): Object type to detect (e.g., 'person', 'car', 'face', 'dog').
+                           Cannot be empty or whitespace-only.
         
     Returns:
-        JSON formatted detection data with coordinates
+        dict: Structured response containing:
+            - success (bool): True if detection completed successfully
+            - data (dict|None): Detection results with structure:
+                - image_path (str): Path to analyzed image
+                - detected_object (str): Object type that was searched for
+                - detection_count (int): Number of objects found
+                - detections (list): List of detection objects with coordinates
+            - error (str|None): Error message or None on success
+            
+    Raises:
+        FileNotFoundError: Image file not found or inaccessible
+        PermissionError: Insufficient permissions to read file
+        ValueError: Empty target_object or unsupported image format
+        
+    Examples:
+        >>> result = await get_detection_data("/Users/luke/crowd.jpg", "person")
+        >>> if result["success"]:
+        ...     data = result["data"]
+        ...     print(f"Found {data['detection_count']} people")
+        ...     for detection in data["detections"]:
+        ...         print(f"Person at: {detection['x_min']}, {detection['y_min']}")
+        
+        >>> # Result structure example:
+        # {
+        #   "success": True,
+        #   "data": {
+        #     "image_path": "/Users/luke/crowd.jpg",
+        #     "detected_object": "person", 
+        #     "detection_count": 2,
+        #     "detections": [
+        #       {"x_min": 0.1, "y_min": 0.2, "x_max": 0.3, "y_max": 0.8, "confidence": 0.95},
+        #       {"x_min": 0.6, "y_min": 0.1, "x_max": 0.8, "y_max": 0.9, "confidence": 0.87}
+        #     ]
+        #   },
+        #   "error": None
+        # }
     """
     try:
         if not validate_image_path(image_path):
@@ -439,17 +561,63 @@ async def get_detection_data(image_path: str, target_object: str) -> dict:
 @mcp.tool()
 async def point_object(image_path: str, target_object: str) -> dict:
     """
-    Find specific points/locations of objects in an image.
+    Find precise point coordinates for objects in an image.
     
-    Returns precise normalized point coordinates for objects,
-    useful for UI automation, precise object location, or counting instances.
+    This tool returns normalized point coordinates (center points) for detected objects,
+    useful for UI automation, click targeting, object counting, or spatial analysis.
+    Points are returned as normalized coordinates (0.0-1.0) relative to image dimensions.
     
     Args:
-        image_path: Absolute file path to the image file on local filesystem
-        target_object: Object to locate (e.g., 'person', 'car', 'face', 'button')
+        image_path (str): Absolute file path to the image file.
+                         Must be within the configured ALLOW_ROOT directory.
+                         Supported formats: .jpg, .jpeg, .png, .gif, .bmp, .webp
+        target_object (str): Object type to locate (e.g., 'person', 'button', 'face', 'car').
+                           Cannot be empty or whitespace-only.
         
     Returns:
-        JSON formatted point data with precise coordinates
+        dict: Structured response containing:
+            - success (bool): True if pointing completed successfully
+            - data (dict|None): Pointing results with structure:
+                - image_path (str): Path to analyzed image
+                - target_object (str): Object type that was searched for
+                - point_count (int): Number of points found
+                - points (list): List of normalized coordinate points [x, y]
+                - request_id (str): Unique identifier for this request
+            - error (str|None): Error message or None on success
+            
+    Raises:
+        FileNotFoundError: Image file not found or inaccessible
+        PermissionError: Insufficient permissions to read file
+        ValueError: Empty target_object or unsupported image format
+        
+    Examples:
+        >>> result = await point_object("/Users/luke/interface.png", "button")
+        >>> if result["success"]:
+        ...     data = result["data"]
+        ...     print(f"Found {data['point_count']} buttons")
+        ...     for point in data["points"]:
+        ...         x, y = point
+        ...         print(f"Button center at: ({x:.3f}, {y:.3f})")
+        
+        >>> # Convert to pixel coordinates
+        >>> image_width, image_height = 1920, 1080
+        >>> for point in data["points"]:
+        ...     pixel_x = int(point[0] * image_width)
+        ...     pixel_y = int(point[1] * image_height)
+        ...     print(f"Pixel coordinates: ({pixel_x}, {pixel_y})")
+        
+        >>> # Result structure example:
+        # {
+        #   "success": True,
+        #   "data": {
+        #     "image_path": "/Users/luke/interface.png",
+        #     "target_object": "button",
+        #     "point_count": 3,
+        #     "points": [[0.25, 0.75], [0.5, 0.25], [0.8, 0.6]],
+        #     "request_id": "abc123"
+        #   },
+        #   "error": None
+        # }
     """
     try:
         if not validate_image_path(image_path):
